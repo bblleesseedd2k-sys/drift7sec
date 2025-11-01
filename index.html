@@ -140,9 +140,10 @@
     <label>💰 Сумма платежа: <input id="inputAmt1" type="text" value="24,899"></label>
     <label>📈 Сумма прибыли: <input id="inputAmt2" type="text" value="248,099.08"></label>
     <label>👤 Имя: <input id="inputName" type="text" value="Yara Mohamed"></label>
+    <label>🎬 Длительность видео (сек): <input id="inputDuration" type="number" value="7" min="1" max="60"></label>
     <button onclick="applyData()">Применить</button>
     <button onclick="startCountdown()">Start</button>
-    <button onclick="recordVideo()">🎥 Сохранить 7-секундное видео</button>
+    <button onclick="recordVideo()">🎥 Сохранить видео</button>
   </div>
 
   <canvas id="canvasRecorder"></canvas>
@@ -255,3 +256,4 @@ document.head.appendChild(s);
 </script>
 </body>
 </html>
+
