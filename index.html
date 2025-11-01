@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Drift Countdown Animation</title>
 
-<!-- 🔹 Подключаем нужный шрифт -->
 <link href="https://fonts.googleapis.com/css?family=Kdam+Thmor&display=swap" rel="stylesheet">
 
 <style>
@@ -83,26 +82,14 @@
     font-size: 14px;
     z-index: 20;
   }
-  .controls label {
-    display: block;
-    margin-top: 6px;
-  }
+  .controls label { display: block; margin-top: 6px; }
   .controls input {
-    width: 200px;
-    padding: 4px 6px;
-    margin-top: 2px;
-    border-radius: 4px;
-    border: none;
+    width: 200px; padding: 4px 6px; margin-top: 2px;
+    border-radius: 4px; border: none;
   }
   .controls button {
-    margin-top: 10px;
-    background: #e64a4a;
-    color: #fff;
-    border: none;
-    padding: 8px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 400;
+    margin-top: 10px; background: #e64a4a; color: #fff; border: none;
+    padding: 8px 10px; border-radius: 6px; cursor: pointer; font-weight: 400;
   }
 
   #canvasRecorder { display: none; }
@@ -113,7 +100,7 @@
     <div class="warning-area">
       <h1>WARNING</h1>
       <div class="sub">PROFIT WILL BE CANCELLED IN</div>
-      <div class="timer" id="timer">00:00:00</div>
+      <div class="timer" id="timer">12:00:00</div>
     </div>
 
     <div class="phone" id="phone">01145852502</div>
@@ -127,7 +114,7 @@
   </div>
 
   <div class="controls" id="controls">
-    <label>⏱ Время начала (HH:MM:SS): <input id="inputTimer" type="text" value="00:00:00"></label>
+    <label>⏱ Время начала (HH:MM:SS): <input id="inputTimer" type="text" value="12:00:00"></label>
     <label>📞 Номер: <input id="inputPhone" type="text" value="01145852502"></label>
     <label>💰 Сумма платежа: <input id="inputAmt1" type="text" value="24,899"></label>
     <label>📈 Сумма прибыли: <input id="inputAmt2" type="text" value="248,099.08"></label>
@@ -141,83 +128,100 @@
   <canvas id="canvasRecorder"></canvas>
 
 <script>
-let countdown = 7;
-let timerInterval;
+let countdown = 0;           // текущее значение таймера в секундах
+let timerInterval = null;    // setInterval id
 
 function pad(n){return n.toString().padStart(2,"0");}
-function fmt(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return `${pad(h)}:${pad(m)}:${pad(sec)}`;}
-
-function updateTimer(){
-  document.getElementById("timer").textContent = fmt(countdown);
+function fmt(s){
+  if (s < 0) s = 0;
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
 }
+function parseHMS(str){
+  const parts = str.trim().split(":");
+  if (parts.length !== 3) return null;
+  const [h,m,s] = parts.map(n => Number(n));
+  if ([h,m,s].some(n => Number.isNaN(n) || n<0)) return null;
+  return h*3600 + m*60 + s;
+}
+function updateTimer(){ document.getElementById("timer").textContent = fmt(countdown); }
 
-function startCountdown(){
+function startCountdown(limitSeconds = null){
+  // если limitSeconds передан — уменьшаем ровно limitSeconds тиков, иначе бесконечно
   clearInterval(timerInterval);
-  const input = document.getElementById("inputTimer").value.trim();
-  const parts = input.split(":").map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) {
-    alert("Введите время в формате HH:MM:SS, например 00:00:10");
-    return;
-  }
-  let h = parts[0], m = parts[1], s = parts[2];
-  let total = h * 3600 + m * 60 + s;
+  const total = parseHMS(document.getElementById("inputTimer").value);
+  if (total === null){ alert("Введите время в формате HH:MM:SS, например 12:00:00"); return; }
+
   countdown = total;
   updateTimer();
+
+  let ticks = 0;
   timerInterval = setInterval(() => {
     countdown--;
     updateTimer();
+    if (limitSeconds !== null) {
+      ticks++;
+      if (ticks >= limitSeconds) {
+        clearInterval(timerInterval);
+      }
+    }
   }, 1000);
 }
 
 function applyData(){
-  document.getElementById("phone").textContent = document.getElementById("inputPhone").value;
+  document.getElementById("phone").textContent   = document.getElementById("inputPhone").value;
   document.getElementById("amount1").textContent = document.getElementById("inputAmt1").value;
   document.getElementById("amount2").textContent = document.getElementById("inputAmt2").value;
-  document.getElementById("username").textContent = document.getElementById("inputName").value;
+  document.getElementById("username").textContent= document.getElementById("inputName").value;
 
-  const duration = parseInt(document.getElementById("inputDuration").value) || 7;
-  document.getElementById("timer").textContent = fmt(duration);
-  document.getElementById("inputTimer").value = fmt(duration);
-  countdown = duration;
+  // показываем на экране именно стартовое время, а не длительность
+  const startVal = document.getElementById("inputTimer").value.trim();
+  const startSec = parseHMS(startVal);
+  document.getElementById("timer").textContent = startSec !== null ? fmt(startSec) : startVal;
 }
 
-// 🔄 синхронизация при изменении длительности без кнопки
+// (опционально) при вводе стартового времени сразу обновлять предпросмотр
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("inputDuration").addEventListener("input", applyData);
+  document.getElementById("inputTimer").addEventListener("input", applyData);
 });
 
 async function recordVideo() {
-  const capture = document.getElementById("captureZone");
+  const capture  = document.getElementById("captureZone");
   const controls = document.getElementById("controls");
   controls.style.display = "none";
 
+  // 1) читаем длительность видео
   let duration = parseInt(document.getElementById("inputDuration").value) || 7;
   if (duration < 1) duration = 1;
   if (duration > 60) duration = 60;
 
-  const userName = document.getElementById("inputName").value.trim().replace(/\s+/g, "_") || "User";
+  // 2) имя для файла
+  const userName = (document.getElementById("inputName").value.trim().replace(/\s+/g, "_")) || "User";
 
-  document.getElementById("timer").textContent = fmt(duration);
-  countdown = duration;
+  // 3) установить таймер на стартовое значение (из поля)
+  const total = parseHMS(document.getElementById("inputTimer").value);
+  if (total === null){ alert("Введите время в формате HH:MM:SS, например 12:00:00"); controls.style.display="block"; return; }
+  countdown = total;
+  updateTimer();
 
+  // небольшая пауза, чтобы шрифты/фон точно применились
   await new Promise(r => setTimeout(r, 500));
 
+  // 4) настраиваем канвас и рекордер
   const canvas = document.getElementById("canvasRecorder");
   const rect = capture.getBoundingClientRect();
   canvas.width = rect.width;
   canvas.height = rect.height;
 
   const ctx = canvas.getContext("2d");
-  const fps = 30;
-  const stream = canvas.captureStream(fps);
+  const stream = canvas.captureStream(30);
   const recorder = new MediaRecorder(stream, { mimeType: "video/webm; codecs=vp9" });
-  let chunks = [];
-
+  const chunks = [];
   recorder.ondataavailable = e => chunks.push(e.data);
   recorder.onstop = () => {
     const blob = new Blob(chunks, { type: "video/webm" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
     a.href = url;
     a.download = `drift_countdown_${userName}_${duration}s.webm`;
     a.click();
@@ -225,29 +229,28 @@ async function recordVideo() {
     controls.style.display = "block";
   };
 
+  // прогреть первый кадр
   await html2canvas(capture, { backgroundColor: null, useCORS: true });
 
+  // 5) старт записи и отсчёта РОВНО на duration секунд
   recorder.start();
-  startCountdown();
+  startCountdown(duration); // ← уменьшаем только duration тиков
 
   const endTime = Date.now() + duration * 1000;
-
-  function drawFrame() {
+  (function drawFrame(){
     html2canvas(capture, { backgroundColor: null, useCORS: true, scale: 1 })
       .then(cnv => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(cnv, 0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(cnv,0,0,canvas.width,canvas.height);
       })
       .catch(err => console.error("Canvas frame error:", err));
 
     if (Date.now() < endTime) {
       requestAnimationFrame(drawFrame);
     } else {
-      setTimeout(() => recorder.stop(), 500);
+      setTimeout(() => recorder.stop(), 300);
     }
-  }
-
-  drawFrame();
+  })();
 }
 
 const s = document.createElement("script");
@@ -256,5 +259,3 @@ document.head.appendChild(s);
 </script>
 </body>
 </html>
-
-
