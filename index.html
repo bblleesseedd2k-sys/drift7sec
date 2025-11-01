@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Drift Countdown Animation</title>
+
+<!-- 🔹 Подключаем нужный шрифт -->
+<link href="https://fonts.googleapis.com/css?family=Kdam+Thmor&display=swap" rel="stylesheet">
+
+<style>
+  body {
+    margin: 0;
+    font-family: "Kdam Thmor", system-ui, sans-serif;
+    background: #000;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* фон — твой оригинальный макет */
+  #captureZone {
+    position: relative;
+    width: 1280px;
+    height: 629px;
+    margin: 0 auto;
+    background: url("background.jpg") center/cover no-repeat;
+  }
+
+  /* Красная зона — WARNING + таймер */
+  .warning-area {
+    position: absolute;
+    top: 100px; left: 415px;
+    width: 600px; text-align: center;
+    color: white;
+  }
+  .warning-area h1 {
+    color: #e64a4a;
+    font-size: 58px;
+    margin-bottom: 2px;
+  }
+  .warning-area .sub {
+    font-size: 40px;
+    margin-bottom: 2px;
+  }
+  .timer {
+    font-size: 58px;
+    font-weight: 400;
+    color: #e64a4a;
+  }
+
+  /* Синяя зона — номер */
+  .phone {
+    position: absolute;
+    top: 441px; left: 625px;
+    font-size: 24px; font-weight: 400;
+    color: black;
+    letter-spacing: 1px;
+  }
+
+  /* Зелёная зона — суммы */
+  .amounts {
+    position: absolute;
+    top: 520px;
+    left: 56%;
+    transform: translateX(-50%);
+    width: auto;
+    font-size: 24px;
+    color: white;
+    text-align: center;
+    white-space: nowrap; /* чтобы не переносились строки */
+  }
+
+  .amounts b { color: white; }
+
+  /* Жёлтая зона — имя */
+  .username {
+    position: absolute;
+    bottom: 20px; left: 62px;
+    color: #ccc;
+    font-size: 18px;
+  }
+
+  /* Панель управления (не записывается в видео) */
+  .controls {
+    position: fixed;
+    bottom: 10px; right: 10px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    z-index: 20;
+  }
+  .controls label {
+    display: block;
+    margin-top: 6px;
+  }
+  .controls input {
+    width: 200px;
+    padding: 4px 6px;
+    margin-top: 2px;
+    border-radius: 4px;
+    border: none;
+  }
+  .controls button {
+    margin-top: 10px;
+    background: #e64a4a;
+    color: #fff;
+    border: none;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 400;
+  }
+
+  #canvasRecorder { display: none; }
+</style>
+</head>
+<body>
+  <div id="captureZone">
+    <div class="warning-area">
+      <h1>WARNING</h1>
+      <div class="sub">PROFIT WILL BE CANCELLED IN</div>
+      <div class="timer" id="timer">00:00:07</div>
+    </div>
+
+    <div class="phone" id="phone">01145852502</div>
+
+    <div class="amounts">
+      THE AMOUNT TO BE PAID IS <span id="amount1">24,899</span> EGP<br>
+      TO THE CONCLUSION: <span id="amount2">248,099.08</span> EGP
+    </div>
+
+    <div class="username" id="username">Yara Mohamed</div>
+  </div>
+
+  <div class="controls" id="controls">
+    <label>⏱ Время начала (HH:MM:SS): <input id="inputTimer" type="text" value="12:00:00"></label>
+    <label>📞 Номер: <input id="inputPhone" type="text" value="01145852502"></label>
+    <label>💰 Сумма платежа: <input id="inputAmt1" type="text" value="24,899"></label>
+    <label>📈 Сумма прибыли: <input id="inputAmt2" type="text" value="248,099.08"></label>
+    <label>👤 Имя: <input id="inputName" type="text" value="Yara Mohamed"></label>
+    <button onclick="applyData()">Применить</button>
+    <button onclick="startCountdown()">Start</button>
+    <button onclick="recordVideo()">🎥 Сохранить 7-секундное видео</button>
+  </div>
+
+  <canvas id="canvasRecorder"></canvas>
+
+<script>
+let countdown = 7;
+let timerInterval;
+function pad(n){return n.toString().padStart(2,"0");}
+function fmt(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return `${pad(h)}:${pad(m)}:${pad(sec)}`;}
+
+function updateTimer(){
+  document.getElementById("timer").textContent = fmt(countdown);
+}
+
+function startCountdown(){
+  clearInterval(timerInterval);
+
+  // Берем начальное время, которое пользователь ввёл в формате HH:MM:SS
+  const input = document.getElementById("inputTimer").value.trim();
+  const parts = input.split(":").map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) {
+    alert("Введите время в формате HH:MM:SS, например 12:00:00");
+    return;
+  }
+
+  // Конвертируем в секунды
+  let h = parts[0], m = parts[1], s = parts[2];
+  let total = h * 3600 + m * 60 + s;
+
+  // Показываем исходное время
+  countdown = total;
+  updateTimer();
+
+  // Каждую секунду уменьшаем время
+  timerInterval = setInterval(() => {
+    countdown--;
+    updateTimer();
+  }, 1000);
+}
+
+function applyData(){
+  document.getElementById("phone").textContent = document.getElementById("inputPhone").value;
+  document.getElementById("amount1").textContent = document.getElementById("inputAmt1").value;
+  document.getElementById("amount2").textContent = document.getElementById("inputAmt2").value;
+  document.getElementById("username").textContent = document.getElementById("inputName").value;
+  document.getElementById("timer").textContent = document.getElementById("inputTimer").value;
+}
+
+
+async function recordVideo() {
+  const capture = document.getElementById("captureZone");
+  const controls = document.getElementById("controls");
+  controls.style.display = "none";
+
+  // ⏳ ждем, чтобы фон и шрифт успели прогрузиться
+  await new Promise(r => setTimeout(r, 500));
+
+  const canvas = document.getElementById("canvasRecorder");
+  const rect = capture.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+
+  const ctx = canvas.getContext("2d");
+  const fps = 30;
+  const stream = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream, { mimeType: "video/webm; codecs=vp9" });
+  let chunks = [];
+
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "drift_countdown.webm";
+    a.click();
+    URL.revokeObjectURL(url);
+    controls.style.display = "block";
+  };
+
+  // 🔹 прогоняем первый кадр html2canvas заранее
+  await html2canvas(capture, { backgroundColor: null, useCORS: true });
+
+  // теперь запускаем запись
+  recorder.start();
+  startCountdown();
+
+  const endTime = Date.now() + 7000;
+  function drawFrame() {
+    html2canvas(capture, { backgroundColor: null, useCORS: true, scale: 1 })
+      .then(cnv => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(cnv, 0, 0, canvas.width, canvas.height);
+      })
+      .catch(err => console.error("Canvas frame error:", err));
+
+    if (Date.now() < endTime) {
+      requestAnimationFrame(drawFrame);
+    } else {
+      setTimeout(() => recorder.stop(), 500);
+    }
+  }
+
+  drawFrame();
+}
+
+const s = document.createElement("script");
+s.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+document.head.appendChild(s);
+</script>
+</body>
+</html>
