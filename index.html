@@ -198,6 +198,12 @@ async function recordVideo() {
   const controls = document.getElementById("controls");
   controls.style.display = "none";
 
+  // Получаем длительность видео (по умолчанию 7 секунд)
+  const durationInput = document.getElementById("inputDuration");
+  let duration = parseInt(durationInput.value) || 7;
+  if (duration < 1) duration = 1;
+  if (duration > 60) duration = 60;
+
   // ⏳ ждем, чтобы фон и шрифт успели прогрузиться
   await new Promise(r => setTimeout(r, 500));
 
@@ -218,7 +224,7 @@ async function recordVideo() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "drift_countdown.webm";
+    a.download = `drift_countdown_${duration}s.webm`;
     a.click();
     URL.revokeObjectURL(url);
     controls.style.display = "block";
@@ -231,7 +237,8 @@ async function recordVideo() {
   recorder.start();
   startCountdown();
 
-  const endTime = Date.now() + 7000;
+  const endTime = Date.now() + duration * 1000;
+
   function drawFrame() {
     html2canvas(capture, { backgroundColor: null, useCORS: true, scale: 1 })
       .then(cnv => {
@@ -256,4 +263,5 @@ document.head.appendChild(s);
 </script>
 </body>
 </html>
+
 
