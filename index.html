@@ -100,7 +100,13 @@
     background: #666;
     cursor: not-allowed;
   }
-  #canvasRecorder { display: none; }
+  
+  /* Canvas для записи - теперь виден но скрыт за сценой */
+  #renderCanvas {
+    position: fixed;
+    top: -10000px;
+    left: -10000px;
+  }
   
   /* Индикатор прогресса */
   #progress {
@@ -141,6 +147,7 @@
     </div>
     <div class="username" id="username">Yara Mohamed</div>
   </div>
+  
   <div class="controls" id="controls">
     <label>⏱ Время начала (HH:MM:SS): <input id="inputTimer" type="text" value="12:00:00"></label>
     <label>📞 Номер: <input id="inputPhone" type="text" value="01145852502"></label>
@@ -157,7 +164,8 @@
       <div id="progressBar"><div id="progressFill"></div></div>
     </div>
   </div>
-  <canvas id="canvasRecorder"></canvas>
+  
+  <canvas id="renderCanvas"></canvas>
   
   <!-- Подключаем библиотеки -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -232,7 +240,6 @@
     const { FFmpeg } = FFmpegWASM;
     ffmpeg = new FFmpeg();
     
-    // Подключаем логи для отслеживания прогресса
     ffmpeg.on("log", ({ message }) => {
       console.log(message);
     });
@@ -267,11 +274,7 @@
   }
   
   async function recordVideo(){
-    const capture = document.getElementById("captureZone");
-    const controls = document.getElementById("controls");
     const recordBtn = document.getElementById("recordBtn");
-    
-    // Блокируем кнопку
     recordBtn.disabled = true;
     recordBtn.textContent = "⏳ Идёт запись...";
     
@@ -290,35 +293,55 @@
     countdown = total;
     updateTimer();
     
-    updateProgress("Подготовка записи...", 5);
-    await new Promise(r=>setTimeout(r,300));
+    updateProgress("Создание снимка экрана...", 5);
     
-    const canvas = document.getElementById("canvasRecorder");
+    // Создаём один snapshot с html2canvas
+    const capture = document.getElementById("captureZone");
+    const snapshot = await html2canvas(capture, {
+      backgroundColor: null,
+      useCORS: true,
+      scale: 1,
+      width: 1280,
+      height: 629
+    });
+    
+    // Создаём canvas для рендеринга
+    const canvas = document.getElementById("renderCanvas");
     canvas.width = 1280;
     canvas.height = 629;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: false });
+    
+    updateProgress("Подготовка записи...", 10);
+    
+    // Создаём stream с canvas (30 FPS)
     const stream = canvas.captureStream(30);
     
-    // 🎧 добавляем "тишину"
+    // Добавляем тихую аудиодорожку
     const audioCtx = new AudioContext();
     const dest = audioCtx.createMediaStreamDestination();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    gain.gain.value = 0;
+    gain.gain.value = 0.001; // Очень тихий звук
     osc.connect(gain).connect(dest);
     osc.start();
     
     const combinedStream = new MediaStream([
-      ...stream.getTracks(),
-      ...dest.stream.getTracks()
+      ...stream.getVideoTracks(),
+      ...dest.stream.getAudioTracks()
     ]);
     
+    // Recorder с битрейтом для качества
     const recorder = new MediaRecorder(combinedStream, {
-      mimeType: "video/webm;codecs=vp9,opus"
+      mimeType: "video/webm;codecs=vp8,opus",
+      videoBitsPerSecond: 5000000 // 5 Mbps
     });
     
     const chunks = [];
-    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.ondataavailable = e => {
+      if (e.data.size > 0) {
+        chunks.push(e.data);
+      }
+    };
     
     recorder.onstop = async () => {
       updateProgress("Обработка видео...", 40);
@@ -326,41 +349,39 @@
       const webmBlob = new Blob(chunks, {type: "video/webm"});
       
       try {
-        // Инициализируем FFmpeg
         const { fetchFile } = FFmpegUtil;
         const ffmpegInstance = await initFFmpeg();
         
         updateProgress("Загрузка видео для конвертации...", 45);
-        
-        // Загружаем WebM в FFmpeg
         await ffmpegInstance.writeFile("input.webm", await fetchFile(webmBlob));
         
         updateProgress("Конвертация в MP4...", 50);
         
-        // Конвертируем WebM → MP4
+        // Конвертация с параметрами для Telegram
         await ffmpegInstance.exec([
           "-i", "input.webm",
-          "-c:v", "libx264",           // H.264 кодек
-          "-preset", "medium",         // Баланс скорость/качество
-          "-crf", "23",                // Качество (18-28)
-          "-c:a", "aac",               // AAC аудио
-          "-b:a", "128k",              // Битрейт аудио
-          "-movflags", "+faststart",   // Быстрый старт
-          "-pix_fmt", "yuv420p",       // Совместимость
+          "-c:v", "libx264",
+          "-profile:v", "baseline",    // Совместимость
+          "-level", "3.0",
+          "-preset", "medium",
+          "-crf", "23",
+          "-pix_fmt", "yuv420p",       // Обязательно для совместимости
+          "-c:a", "aac",
+          "-b:a", "128k",
+          "-ar", "44100",              // Sample rate
+          "-movflags", "+faststart",    // Быстрый старт
+          "-r", "30",                  // Фиксированный FPS
           "output.mp4"
         ]);
         
         updateProgress("Получение MP4 файла...", 95);
         
-        // Получаем MP4
         const mp4Data = await ffmpegInstance.readFile("output.mp4");
         const mp4Blob = new Blob([mp4Data.buffer], {type: "video/mp4"});
         
-        // Очищаем временные файлы
         await ffmpegInstance.deleteFile("input.webm");
         await ffmpegInstance.deleteFile("output.mp4");
         
-        // Скачиваем
         const url = URL.createObjectURL(mp4Blob);
         const a = document.createElement("a");
         a.href = url;
@@ -374,41 +395,61 @@
       } catch (error) {
         console.error("Ошибка конвертации:", error);
         hideProgress();
-        alert("Не удалось сконвертировать в MP4. Попробуйте ещё раз или обновите страницу.");
+        alert("Не удалось сконвертировать в MP4: " + error.message);
       }
       
-      // Разблокируем кнопку
       recordBtn.disabled = false;
       recordBtn.textContent = "🎥 Сохранить видео";
+      osc.stop();
+      audioCtx.close();
     };
     
-    await html2canvas(capture, {backgroundColor:null, useCORS:true});
+    // Запускаем запись
+    recorder.start(100); // Чанки по 100мс
+    updateProgress("Запись видео...", 15);
     
-    updateProgress("Запись видео...", 10);
-    recorder.start();
+    // Запускаем таймер
     startCountdown(duration);
     
-    const endTime = Date.now() + duration * 1000;
     const startTime = Date.now();
+    const endTime = startTime + duration * 1000;
+    const fps = 30;
+    const frameDelay = 1000 / fps;
     
-    (function drawFrame(){
-      html2canvas(capture, {backgroundColor:null, useCORS:true, scale:1})
-        .then(cnv => {
-          ctx.clearRect(0,0,canvas.width,canvas.height);
-          ctx.drawImage(cnv,0,0,canvas.width,canvas.height);
-          
-          // Обновляем прогресс записи
-          const elapsed = Date.now() - startTime;
-          const percent = Math.min((elapsed / (duration * 1000)) * 30, 30);
-          updateProgress(`Запись видео: ${Math.round(elapsed/1000)}/${duration} сек`, 10 + percent);
-        });
+    // Анимация с фиксированным FPS
+    function renderFrame() {
+      const now = Date.now();
+      const elapsed = now - startTime;
       
-      if(Date.now() < endTime) {
-        requestAnimationFrame(drawFrame);
+      // Рисуем базовый snapshot
+      ctx.drawImage(snapshot, 0, 0, 1280, 629);
+      
+      // Обновляем таймер на canvas
+      ctx.font = '58px "Kdam Thmor", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e64a4a';
+      
+      // Очищаем область таймера
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(415, 200, 600, 80);
+      
+      // Рисуем новый таймер
+      ctx.fillStyle = '#e64a4a';
+      ctx.fillText(fmt(countdown), 715, 260);
+      
+      const percent = Math.min((elapsed / (duration * 1000)) * 25, 25);
+      updateProgress(`Запись: ${Math.round(elapsed/1000)}/${duration} сек`, 15 + percent);
+      
+      if (now < endTime) {
+        setTimeout(renderFrame, frameDelay);
       } else {
-        setTimeout(() => recorder.stop(), 300);
+        setTimeout(() => {
+          recorder.stop();
+        }, 500);
       }
-    })();
+    }
+    
+    renderFrame();
   }
   </script>
 </body>
