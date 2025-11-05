@@ -4,10 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Drift Countdown Animation</title>
-
 <!-- 🔹 Подключаем шрифт -->
 <link href="https://fonts.googleapis.com/css?family=Kdam+Thmor&display=swap" rel="stylesheet">
-
 <style>
   html, body {
     height: 100%;
@@ -20,7 +18,6 @@
     overflow: hidden;
     font-family: "Kdam Thmor", system-ui, sans-serif;
   }
-
   /* Основной блок */
   #captureZone {
     position: relative;
@@ -29,7 +26,6 @@
     background: url("background.jpg") center/cover no-repeat;
     transform-origin: top center;
   }
-
   /* Масштаб под экран */
   @media (min-aspect-ratio: 1280/629) {
     #captureZone { transform: scale(calc(100vh / 629)); }
@@ -37,7 +33,6 @@
   @media (max-aspect-ratio: 1280/629) {
     #captureZone { transform: scale(calc(100vw / 1280)); }
   }
-
   .warning-area {
     position: absolute;
     top: 100px; left: 415px;
@@ -58,7 +53,6 @@
     font-weight: 400;
     color: #e64a4a;
   }
-
   .phone {
     position: absolute;
     top: 441px; left: 625px;
@@ -66,7 +60,6 @@
     color: black;
     letter-spacing: 1px;
   }
-
   .amounts {
     position: absolute;
     top: 520px;
@@ -77,14 +70,12 @@
     text-align: center;
     white-space: nowrap;
   }
-
   .username {
     position: absolute;
     bottom: 20px; left: 62px;
     color: #ccc;
     font-size: 18px;
   }
-
   /* Панель управления */
   .controls {
     position: fixed;
@@ -105,11 +96,37 @@
     margin-top: 10px; background: #e64a4a; color: #fff; border: none;
     padding: 8px 10px; border-radius: 6px; cursor: pointer; font-weight: 400;
   }
-
+  .controls button:disabled {
+    background: #666;
+    cursor: not-allowed;
+  }
   #canvasRecorder { display: none; }
+  
+  /* Индикатор прогресса */
+  #progress {
+    display: none;
+    margin-top: 10px;
+    padding: 8px;
+    background: rgba(0,0,0,0.8);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  #progressBar {
+    width: 100%;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  #progressFill {
+    height: 100%;
+    background: #e64a4a;
+    width: 0%;
+    transition: width 0.3s;
+  }
 </style>
 </head>
-
 <body>
   <div id="captureZone">
     <div class="warning-area">
@@ -117,17 +134,13 @@
       <div class="sub">PROFIT WILL BE CANCELLED IN</div>
       <div class="timer" id="timer">12:00:00</div>
     </div>
-
     <div class="phone" id="phone">01145852502</div>
-
     <div class="amounts">
       THE AMOUNT TO BE PAID IS <span id="amount1">24,899</span> EGP<br>
       TO THE CONCLUSION: <span id="amount2">248,099.08</span> EGP
     </div>
-
     <div class="username" id="username">Yara Mohamed</div>
   </div>
-
   <div class="controls" id="controls">
     <label>⏱ Время начала (HH:MM:SS): <input id="inputTimer" type="text" value="12:00:00"></label>
     <label>📞 Номер: <input id="inputPhone" type="text" value="01145852502"></label>
@@ -137,36 +150,67 @@
     <label>🎬 Длительность видео (сек): <input id="inputDuration" type="number" value="7" min="1" max="60"></label>
     <button onclick="applyData()">Применить</button>
     <button onclick="startCountdown()">Start</button>
-    <button onclick="recordVideo()">🎥 Сохранить видео</button>
+    <button id="recordBtn" onclick="recordVideo()">🎥 Сохранить видео</button>
+    
+    <div id="progress">
+      <div id="progressText">Подготовка...</div>
+      <div id="progressBar"><div id="progressFill"></div></div>
+    </div>
   </div>
-
   <canvas id="canvasRecorder"></canvas>
-
+  
+  <!-- Подключаем библиотеки -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+  
   <script>
   let countdown = 0;
   let timerInterval = null;
-
+  let ffmpeg = null;
+  
   function pad(n){return n.toString().padStart(2,"0");}
-  function fmt(s){if(s<0)s=0;const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return`${pad(h)}:${pad(m)}:${pad(sec)}`;}
+  
+  function fmt(s){
+    if(s<0) s=0;
+    const h=Math.floor(s/3600);
+    const m=Math.floor((s%3600)/60);
+    const sec=s%60;
+    return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+  }
+  
   function parseHMS(str){
-    const parts=str.trim().split(":");if(parts.length!==3)return null;
-    const[h,m,s]=parts.map(Number);if([h,m,s].some(n=>isNaN(n)||n<0))return null;
+    const parts=str.trim().split(":");
+    if(parts.length!==3) return null;
+    const[h,m,s]=parts.map(Number);
+    if([h,m,s].some(n=>isNaN(n)||n<0)) return null;
     return h*3600+m*60+s;
   }
-  function updateTimer(){document.getElementById("timer").textContent=fmt(countdown);}
+  
+  function updateTimer(){
+    document.getElementById("timer").textContent=fmt(countdown);
+  }
+  
   function startCountdown(limitSeconds=null){
     clearInterval(timerInterval);
     const total=parseHMS(document.getElementById("inputTimer").value);
-    if(total===null){alert("Введите время в формате HH:MM:SS, например 12:00:00");return;}
-    countdown=total;updateTimer();
+    if(total===null){
+      alert("Введите время в формате HH:MM:SS, например 12:00:00");
+      return;
+    }
+    countdown=total;
+    updateTimer();
     let ticks=0;
     timerInterval=setInterval(()=>{
-      countdown--;updateTimer();
-      if(limitSeconds!==null){ticks++;if(ticks>=limitSeconds)clearInterval(timerInterval);}
+      countdown--;
+      updateTimer();
+      if(limitSeconds!==null){
+        ticks++;
+        if(ticks>=limitSeconds) clearInterval(timerInterval);
+      }
     },1000);
   }
+  
   function applyData(){
     document.getElementById("phone").textContent=document.getElementById("inputPhone").value;
     document.getElementById("amount1").textContent=document.getElementById("inputAmt1").value;
@@ -176,68 +220,194 @@
     const s=parseHMS(val);
     document.getElementById("timer").textContent=s!==null?fmt(s):val;
   }
+  
   document.addEventListener("DOMContentLoaded",()=>{
     document.getElementById("inputTimer").addEventListener("input",applyData);
   });
-
+  
+  // Инициализация FFmpeg
+  async function initFFmpeg() {
+    if (ffmpeg) return ffmpeg;
+    
+    const { FFmpeg } = FFmpegWASM;
+    ffmpeg = new FFmpeg();
+    
+    // Подключаем логи для отслеживания прогресса
+    ffmpeg.on("log", ({ message }) => {
+      console.log(message);
+    });
+    
+    ffmpeg.on("progress", ({ progress }) => {
+      const percent = Math.round(progress * 100);
+      updateProgress(`Конвертация в MP4: ${percent}%`, 50 + percent / 2);
+    });
+    
+    updateProgress("Загрузка FFmpeg...", 0);
+    
+    await ffmpeg.load({
+      coreURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+      wasmURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm"
+    });
+    
+    return ffmpeg;
+  }
+  
+  function updateProgress(text, percent) {
+    const progressDiv = document.getElementById("progress");
+    const progressText = document.getElementById("progressText");
+    const progressFill = document.getElementById("progressFill");
+    
+    progressDiv.style.display = "block";
+    progressText.textContent = text;
+    progressFill.style.width = percent + "%";
+  }
+  
+  function hideProgress() {
+    document.getElementById("progress").style.display = "none";
+  }
+  
   async function recordVideo(){
-    const capture=document.getElementById("captureZone");
-    const controls=document.getElementById("controls");
-    controls.style.display="none";
-
-    let duration=parseInt(document.getElementById("inputDuration").value)||7;
-    duration=Math.min(Math.max(duration,1),60);
-
-    const userName=(document.getElementById("inputName").value.trim().replace(/\s+/g,"_"))||"User";
-    const total=parseHMS(document.getElementById("inputTimer").value);
-    if(total===null){alert("Введите время в формате HH:MM:SS, например 12:00:00");controls.style.display="block";return;}
-    countdown=total;updateTimer();
-
+    const capture = document.getElementById("captureZone");
+    const controls = document.getElementById("controls");
+    const recordBtn = document.getElementById("recordBtn");
+    
+    // Блокируем кнопку
+    recordBtn.disabled = true;
+    recordBtn.textContent = "⏳ Идёт запись...";
+    
+    let duration = parseInt(document.getElementById("inputDuration").value) || 7;
+    duration = Math.min(Math.max(duration,1),60);
+    const userName = (document.getElementById("inputName").value.trim().replace(/\s+/g,"_")) || "User";
+    const total = parseHMS(document.getElementById("inputTimer").value);
+    
+    if(total===null){
+      alert("Введите время в формате HH:MM:SS, например 12:00:00");
+      recordBtn.disabled = false;
+      recordBtn.textContent = "🎥 Сохранить видео";
+      return;
+    }
+    
+    countdown = total;
+    updateTimer();
+    
+    updateProgress("Подготовка записи...", 5);
     await new Promise(r=>setTimeout(r,300));
-
-    const canvas=document.getElementById("canvasRecorder");
-    canvas.width=1280;canvas.height=629;
-    const ctx=canvas.getContext("2d");
-    const stream=canvas.captureStream(30);
-
-    // 🎧 добавляем “тишину”
-    const audioCtx=new AudioContext();
-    const dest=audioCtx.createMediaStreamDestination();
-    const osc=audioCtx.createOscillator();
-    const gain=audioCtx.createGain();
-    gain.gain.value=0;
+    
+    const canvas = document.getElementById("canvasRecorder");
+    canvas.width = 1280;
+    canvas.height = 629;
+    const ctx = canvas.getContext("2d");
+    const stream = canvas.captureStream(30);
+    
+    // 🎧 добавляем "тишину"
+    const audioCtx = new AudioContext();
+    const dest = audioCtx.createMediaStreamDestination();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
     osc.connect(gain).connect(dest);
     osc.start();
-
-    const combinedStream=new MediaStream([...stream.getTracks(),...dest.stream.getTracks()]);
-    const recorder=new MediaRecorder(combinedStream,{mimeType:"video/webm;codecs=vp9,opus"});
-    const chunks=[];
-    recorder.ondataavailable=e=>chunks.push(e.data);
-    recorder.onstop=()=>{
-      const blob=new Blob(chunks,{type:"video/webm"});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      // ⚠️ сохраняем с расширением .mp4 — мессенджеры распознают как видео
-      a.href=url;
-      a.download=`drift_countdown_${userName}_${duration}s.mp4`;
-      a.click();
-      URL.revokeObjectURL(url);
-      controls.style.display="block";
+    
+    const combinedStream = new MediaStream([
+      ...stream.getTracks(),
+      ...dest.stream.getTracks()
+    ]);
+    
+    const recorder = new MediaRecorder(combinedStream, {
+      mimeType: "video/webm;codecs=vp9,opus"
+    });
+    
+    const chunks = [];
+    recorder.ondataavailable = e => chunks.push(e.data);
+    
+    recorder.onstop = async () => {
+      updateProgress("Обработка видео...", 40);
+      
+      const webmBlob = new Blob(chunks, {type: "video/webm"});
+      
+      try {
+        // Инициализируем FFmpeg
+        const { fetchFile } = FFmpegUtil;
+        const ffmpegInstance = await initFFmpeg();
+        
+        updateProgress("Загрузка видео для конвертации...", 45);
+        
+        // Загружаем WebM в FFmpeg
+        await ffmpegInstance.writeFile("input.webm", await fetchFile(webmBlob));
+        
+        updateProgress("Конвертация в MP4...", 50);
+        
+        // Конвертируем WebM → MP4
+        await ffmpegInstance.exec([
+          "-i", "input.webm",
+          "-c:v", "libx264",           // H.264 кодек
+          "-preset", "medium",         // Баланс скорость/качество
+          "-crf", "23",                // Качество (18-28)
+          "-c:a", "aac",               // AAC аудио
+          "-b:a", "128k",              // Битрейт аудио
+          "-movflags", "+faststart",   // Быстрый старт
+          "-pix_fmt", "yuv420p",       // Совместимость
+          "output.mp4"
+        ]);
+        
+        updateProgress("Получение MP4 файла...", 95);
+        
+        // Получаем MP4
+        const mp4Data = await ffmpegInstance.readFile("output.mp4");
+        const mp4Blob = new Blob([mp4Data.buffer], {type: "video/mp4"});
+        
+        // Очищаем временные файлы
+        await ffmpegInstance.deleteFile("input.webm");
+        await ffmpegInstance.deleteFile("output.mp4");
+        
+        // Скачиваем
+        const url = URL.createObjectURL(mp4Blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `drift_countdown_${userName}_${duration}s.mp4`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        updateProgress("Готово! ✅", 100);
+        setTimeout(hideProgress, 2000);
+        
+      } catch (error) {
+        console.error("Ошибка конвертации:", error);
+        hideProgress();
+        alert("Не удалось сконвертировать в MP4. Попробуйте ещё раз или обновите страницу.");
+      }
+      
+      // Разблокируем кнопку
+      recordBtn.disabled = false;
+      recordBtn.textContent = "🎥 Сохранить видео";
     };
-
-    await html2canvas(capture,{backgroundColor:null,useCORS:true});
+    
+    await html2canvas(capture, {backgroundColor:null, useCORS:true});
+    
+    updateProgress("Запись видео...", 10);
     recorder.start();
     startCountdown(duration);
-
-    const endTime=Date.now()+duration*1000;
+    
+    const endTime = Date.now() + duration * 1000;
+    const startTime = Date.now();
+    
     (function drawFrame(){
-      html2canvas(capture,{backgroundColor:null,useCORS:true,scale:1})
-        .then(cnv=>{
+      html2canvas(capture, {backgroundColor:null, useCORS:true, scale:1})
+        .then(cnv => {
           ctx.clearRect(0,0,canvas.width,canvas.height);
           ctx.drawImage(cnv,0,0,canvas.width,canvas.height);
+          
+          // Обновляем прогресс записи
+          const elapsed = Date.now() - startTime;
+          const percent = Math.min((elapsed / (duration * 1000)) * 30, 30);
+          updateProgress(`Запись видео: ${Math.round(elapsed/1000)}/${duration} сек`, 10 + percent);
         });
-      if(Date.now()<endTime)requestAnimationFrame(drawFrame);
-      else setTimeout(()=>recorder.stop(),300);
+      
+      if(Date.now() < endTime) {
+        requestAnimationFrame(drawFrame);
+      } else {
+        setTimeout(() => recorder.stop(), 300);
+      }
     })();
   }
   </script>
