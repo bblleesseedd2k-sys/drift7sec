@@ -143,6 +143,8 @@
 
   <canvas id="canvasRecorder"></canvas>
 
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
 <script>
 let countdown = 0;
 let timerInterval = null;
@@ -186,12 +188,10 @@ function applyData(){
   document.getElementById("amount1").textContent = document.getElementById("inputAmt1").value;
   document.getElementById("amount2").textContent = document.getElementById("inputAmt2").value;
   document.getElementById("username").textContent= document.getElementById("inputName").value;
-
   const startVal = document.getElementById("inputTimer").value.trim();
   const startSec = parseHMS(startVal);
   document.getElementById("timer").textContent = startSec !== null ? fmt(startSec) : startVal;
 }
-
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("inputTimer").addEventListener("input", applyData);
 });
@@ -216,25 +216,41 @@ async function recordVideo() {
   const canvas = document.getElementById("canvasRecorder");
   canvas.width = 1280;
   canvas.height = 629;
-
   const ctx = canvas.getContext("2d");
   const stream = canvas.captureStream(30);
-  const recorder = new MediaRecorder(stream, { mimeType: "video/webm; codecs=vp9" });
+
+  // 🎧 создаем "тишину"
+  const audioCtx = new AudioContext();
+  const dest = audioCtx.createMediaStreamDestination();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0;
+  osc.connect(gain).connect(dest);
+  osc.start();
+
+  const mixedStream = new MediaStream([...stream.getTracks(), ...dest.stream.getTracks()]);
+  const recorder = new MediaRecorder(mixedStream, { mimeType: "video/webm; codecs=vp9,opus" });
   const chunks = [];
   recorder.ondataavailable = e => chunks.push(e.data);
-  recorder.onstop = () => {
+  recorder.onstop = async () => {
     const blob = new Blob(chunks, { type: "video/webm" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: false });
+    await ffmpeg.load();
+    ffmpeg.FS("writeFile", "input.webm", await fetchFile(blob));
+    await ffmpeg.run("-i", "input.webm", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "output.mp4");
+    const data = ffmpeg.FS("readFile", "output.mp4");
+    const mp4Blob = new Blob([data.buffer], { type: "video/mp4" });
+    const url = URL.createObjectURL(mp4Blob);
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `drift_countdown_${userName}_${duration}s.webm`;
+    a.download = `drift_countdown_${userName}_${duration}s.mp4`;
     a.click();
     URL.revokeObjectURL(url);
     controls.style.display = "block";
   };
 
   await html2canvas(capture, { backgroundColor: null, useCORS: true });
-
   recorder.start();
   startCountdown(duration);
 
@@ -244,17 +260,11 @@ async function recordVideo() {
       .then(cnv => {
         ctx.clearRect(0,0,canvas.width,canvas.height);
         ctx.drawImage(cnv,0,0,canvas.width,canvas.height);
-      })
-      .catch(err => console.error("Canvas frame error:", err));
-
+      });
     if (Date.now() < endTime) requestAnimationFrame(drawFrame);
     else setTimeout(() => recorder.stop(), 300);
   })();
 }
-
-const s = document.createElement("script");
-s.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
-document.head.appendChild(s);
 </script>
 </body>
 </html>
