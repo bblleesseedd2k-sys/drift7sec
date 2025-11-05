@@ -22,90 +22,117 @@
   #captureZone {
     position: relative;
     width: 1280px;
-    height: 629px;
+    height: 720px;
     background: url("background.jpg") center/cover no-repeat;
     transform-origin: top center;
   }
   /* Масштаб под экран */
-  @media (min-aspect-ratio: 1280/629) {
-    #captureZone { transform: scale(calc(100vh / 629)); }
+  @media (min-aspect-ratio: 16/9) {
+    #captureZone { transform: scale(calc(100vh / 720)); }
   }
-  @media (max-aspect-ratio: 1280/629) {
+  @media (max-aspect-ratio: 16/9) {
     #captureZone { transform: scale(calc(100vw / 1280)); }
   }
   .warning-area {
     position: absolute;
-    top: 100px; left: 415px;
-    width: 600px; text-align: center;
+    top: 100px; 
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px; 
+    text-align: center;
     color: white;
   }
   .warning-area h1 {
     color: #e64a4a;
     font-size: 58px;
-    margin-bottom: 2px;
+    margin: 0 0 10px 0;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
   }
   .warning-area .sub {
     font-size: 40px;
-    margin-bottom: 2px;
+    margin: 0 0 20px 0;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
   }
   .timer {
-    font-size: 58px;
-    font-weight: 400;
+    font-size: 80px;
+    font-weight: 700;
     color: #e64a4a;
+    text-shadow: 3px 3px 6px rgba(0,0,0,0.9);
+    letter-spacing: 8px;
   }
   .phone {
     position: absolute;
-    top: 441px; left: 625px;
-    font-size: 24px; font-weight: 400;
-    color: black;
-    letter-spacing: 1px;
+    top: 441px; 
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 28px; 
+    font-weight: 600;
+    color: #000;
+    letter-spacing: 2px;
+    background: rgba(255,255,255,0.95);
+    padding: 15px 40px;
+    border-radius: 50px;
   }
   .amounts {
     position: absolute;
-    top: 520px;
-    left: 56%;
+    top: 540px;
+    left: 50%;
     transform: translateX(-50%);
-    font-size: 24px;
+    font-size: 26px;
+    font-weight: 600;
     color: white;
     text-align: center;
     white-space: nowrap;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
   }
   .username {
     position: absolute;
-    bottom: 20px; left: 62px;
+    bottom: 30px; 
+    left: 62px;
     color: #ccc;
-    font-size: 18px;
+    font-size: 20px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
   }
   /* Панель управления */
   .controls {
     position: fixed;
     bottom: 10px; right: 10px;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.8);
     color: #fff;
     padding: 12px 16px;
     border-radius: 10px;
     font-size: 14px;
     z-index: 20;
+    max-width: 300px;
   }
   .controls label { display: block; margin-top: 6px; }
   .controls input {
-    width: 200px; padding: 4px 6px; margin-top: 2px;
-    border-radius: 4px; border: none;
+    width: 100%; 
+    padding: 6px 8px; 
+    margin-top: 2px;
+    border-radius: 4px; 
+    border: none;
+    box-sizing: border-box;
   }
   .controls button {
-    margin-top: 10px; background: #e64a4a; color: #fff; border: none;
-    padding: 8px 10px; border-radius: 6px; cursor: pointer; font-weight: 400;
+    margin-top: 10px; 
+    background: #e64a4a; 
+    color: #fff; 
+    border: none;
+    padding: 10px 12px; 
+    border-radius: 6px; 
+    cursor: pointer; 
+    font-weight: 600;
+    width: 100%;
   }
   .controls button:disabled {
     background: #666;
     cursor: not-allowed;
   }
   
-  /* Canvas для записи */
+  /* Canvas для записи - скрыт */
   #renderCanvas {
-    position: fixed;
-    top: -10000px;
-    left: -10000px;
+    display: none;
   }
   
   /* Индикатор прогресса */
@@ -113,15 +140,15 @@
     display: none;
     margin-top: 10px;
     padding: 8px;
-    background: rgba(0,0,0,0.8);
+    background: rgba(0,0,0,0.9);
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 12px;
   }
   #progressBar {
     width: 100%;
-    height: 6px;
+    height: 8px;
     background: #333;
-    border-radius: 3px;
+    border-radius: 4px;
     overflow: hidden;
     margin-top: 6px;
   }
@@ -133,12 +160,12 @@
   }
   
   .note {
-    margin-top: 10px;
+    margin-top: 8px;
     padding: 6px;
     background: rgba(230, 74, 74, 0.2);
     border-radius: 4px;
-    font-size: 11px;
-    line-height: 1.4;
+    font-size: 10px;
+    line-height: 1.3;
   }
 </style>
 </head>
@@ -158,15 +185,15 @@
   </div>
   
   <div class="controls" id="controls">
-    <label>⏱ Время начала (HH:MM:SS): <input id="inputTimer" type="text" value="12:00:00"></label>
+    <label>⏱ Время (HH:MM:SS): <input id="inputTimer" type="text" value="12:00:00"></label>
     <label>📞 Номер: <input id="inputPhone" type="text" value="01145852502"></label>
-    <label>💰 Сумма платежа: <input id="inputAmt1" type="text" value="24,899"></label>
-    <label>📈 Сумма прибыли: <input id="inputAmt2" type="text" value="248,099.08"></label>
+    <label>💰 Платёж: <input id="inputAmt1" type="text" value="24,899"></label>
+    <label>📈 Прибыль: <input id="inputAmt2" type="text" value="248,099.08"></label>
     <label>👤 Имя: <input id="inputName" type="text" value="Yara Mohamed"></label>
-    <label>🎬 Длительность видео (сек): <input id="inputDuration" type="number" value="7" min="1" max="60"></label>
+    <label>🎬 Длительность (сек): <input id="inputDuration" type="number" value="7" min="1" max="60"></label>
     <button onclick="applyData()">Применить</button>
-    <button onclick="startCountdown()">Start</button>
-    <button id="recordBtn" onclick="recordVideo()">🎥 Сохранить видео (MP4)</button>
+    <button onclick="startCountdown()">▶ Start</button>
+    <button id="recordBtn" onclick="recordVideo()">🎥 MP4 для Telegram</button>
     
     <div id="progress">
       <div id="progressText">Подготовка...</div>
@@ -174,7 +201,7 @@
     </div>
     
     <div class="note">
-      💡 Видео сохраняется в MP4 формате для Telegram и других мессенджеров
+      💡 Видео сохраняется в MP4 (H.264) для Telegram
     </div>
   </div>
   
@@ -223,7 +250,7 @@
     clearInterval(timerInterval);
     const total=parseHMS(document.getElementById("inputTimer").value);
     if(total===null){
-      alert("Введите время в формате HH:MM:SS, например 12:00:00");
+      alert("Введите время в формате HH:MM:SS");
       return;
     }
     countdown=total;
@@ -271,12 +298,11 @@
   async function initFFmpeg() {
     if (ffmpeg) return ffmpeg;
     
-    // Ждём загрузки модулей
     while (!window.ffmpegReady) {
       await new Promise(r => setTimeout(r, 100));
     }
     
-    updateProgress("Загрузка FFmpeg (первый раз может занять ~30 сек)...", 5);
+    updateProgress("Загрузка FFmpeg...", 5);
     
     ffmpeg = new window.FFmpeg();
     
@@ -284,9 +310,9 @@
       console.log(message);
     });
     
-    ffmpeg.on("progress", ({ progress, time }) => {
+    ffmpeg.on("progress", ({ progress }) => {
       const percent = Math.round(progress * 100);
-      updateProgress(`Конвертация в MP4: ${percent}%`, 50 + percent / 2);
+      updateProgress(`Конвертация: ${percent}%`, 50 + percent / 2);
     });
     
     const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
@@ -302,7 +328,7 @@
   async function recordVideo(){
     const recordBtn = document.getElementById("recordBtn");
     recordBtn.disabled = true;
-    recordBtn.textContent = "⏳ Идёт запись...";
+    recordBtn.textContent = "⏳ Записываю...";
     
     let duration = parseInt(document.getElementById("inputDuration").value) || 7;
     duration = Math.min(Math.max(duration,1),60);
@@ -310,9 +336,9 @@
     const total = parseHMS(document.getElementById("inputTimer").value);
     
     if(total===null){
-      alert("Введите время в формате HH:MM:SS, например 12:00:00");
+      alert("Введите время в формате HH:MM:SS");
       recordBtn.disabled = false;
-      recordBtn.textContent = "🎥 Сохранить видео (MP4)";
+      recordBtn.textContent = "🎥 MP4 для Telegram";
       return;
     }
     
@@ -320,30 +346,30 @@
     updateTimer();
     
     try {
-      updateProgress("Создание снимка экрана...", 10);
+      updateProgress("Создание снимка...", 10);
       
-      // Создаём snapshot
+      // Создаём snapshot ОДИН РАЗ
       const capture = document.getElementById("captureZone");
       const snapshot = await html2canvas(capture, {
-        backgroundColor: null,
+        backgroundColor: '#000',
         useCORS: true,
         scale: 1,
         width: 1280,
-        height: 629
+        height: 720
       });
       
-      // Canvas для рендеринга
+      // Canvas для записи
       const canvas = document.getElementById("renderCanvas");
       canvas.width = 1280;
-      canvas.height = 629;
+      canvas.height = 720;
       const ctx = canvas.getContext("2d", { alpha: false });
       
       updateProgress("Подготовка записи...", 15);
       
-      // Stream с canvas
+      // Stream
       const stream = canvas.captureStream(30);
       
-      // Тихая аудиодорожка
+      // Аудио
       const audioCtx = new AudioContext();
       const dest = audioCtx.createMediaStreamDestination();
       const osc = audioCtx.createOscillator();
@@ -360,7 +386,7 @@
       // Recorder
       const recorder = new MediaRecorder(combinedStream, {
         mimeType: 'video/webm;codecs=vp8,opus',
-        videoBitsPerSecond: 5000000
+        videoBitsPerSecond: 8000000
       });
       
       const chunks = [];
@@ -370,41 +396,42 @@
       
       recorder.onstop = async () => {
         try {
-          updateProgress("Обработка видео...", 40);
+          updateProgress("Обработка...", 40);
           
           const webmBlob = new Blob(chunks, {type: "video/webm"});
           
-          // Инициализируем FFmpeg
           const ffmpegInstance = await initFFmpeg();
           
-          updateProgress("Загрузка видео для конвертации...", 45);
+          updateProgress("Загрузка для конвертации...", 45);
           await ffmpegInstance.writeFile("input.webm", await window.fetchFile(webmBlob));
           
           updateProgress("Конвертация в MP4...", 50);
           
-          // Конвертация с параметрами для Telegram
+          // КРИТИЧНО: параметры для Telegram
           await ffmpegInstance.exec([
             "-i", "input.webm",
             "-c:v", "libx264",
-            "-profile:v", "baseline",
-            "-level", "3.0",
-            "-preset", "fast",
-            "-crf", "23",
+            "-profile:v", "main",        // Main profile вместо baseline
+            "-level", "4.0",             // Уровень 4.0
+            "-preset", "medium",
+            "-crf", "20",                // Выше качество
             "-pix_fmt", "yuv420p",
+            "-vf", "scale=1280:720",     // Точный размер
             "-c:a", "aac",
-            "-b:a", "128k",
-            "-ar", "44100",
+            "-b:a", "192k",              // Выше битрейт аудио
+            "-ar", "48000",              // 48kHz для лучшей совместимости
+            "-ac", "2",                  // Стерео
             "-movflags", "+faststart",
             "-r", "30",
+            "-max_muxing_queue_size", "1024",
             "output.mp4"
           ]);
           
-          updateProgress("Получение MP4 файла...", 95);
+          updateProgress("Получение MP4...", 95);
           
           const mp4Data = await ffmpegInstance.readFile("output.mp4");
           const mp4Blob = new Blob([mp4Data.buffer], {type: "video/mp4"});
           
-          // Очистка
           await ffmpegInstance.deleteFile("input.webm");
           await ffmpegInstance.deleteFile("output.mp4");
           
@@ -412,26 +439,26 @@
           const url = URL.createObjectURL(mp4Blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = `drift_countdown_${userName}_${duration}s.mp4`;
+          a.download = `drift_${userName}_${duration}s.mp4`;
           a.click();
           URL.revokeObjectURL(url);
           
-          updateProgress("Готово! ✅", 100);
+          updateProgress("✅ Готово!", 100);
           setTimeout(hideProgress, 2000);
           
         } catch (error) {
-          console.error("Ошибка конвертации:", error);
+          console.error("Ошибка:", error);
           hideProgress();
-          alert("Ошибка конвертации: " + error.message + "\n\nПопробуйте обновить страницу и записать снова.");
+          alert("Ошибка: " + error.message);
         }
         
         recordBtn.disabled = false;
-        recordBtn.textContent = "🎥 Сохранить видео (MP4)";
+        recordBtn.textContent = "🎥 MP4 для Telegram";
         osc.stop();
         audioCtx.close();
       };
       
-      // Запуск записи
+      // ЗАПУСК
       recorder.start(100);
       updateProgress("Запись видео...", 20);
       
@@ -439,46 +466,61 @@
       
       const startTime = Date.now();
       const endTime = startTime + duration * 1000;
-      const fps = 30;
-      const frameDelay = 1000 / fps;
       
-      // Анимация
+      // Рендер кадров
       function renderFrame() {
         const now = Date.now();
         const elapsed = now - startTime;
         
-        ctx.drawImage(snapshot, 0, 0, 1280, 629);
+        // ПОЛНОСТЬЮ очищаем canvas
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 1280, 720);
         
-        // Обновляем таймер
-        ctx.font = '58px "Kdam Thmor", sans-serif';
+        // Рисуем snapshot
+        ctx.drawImage(snapshot, 0, 0, 1280, 720);
+        
+        // ПЕРЕРИСОВЫВАЕМ таймер ПОВЕРХ
+        ctx.font = 'bold 80px "Kdam Thmor", sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(0, 0, 0, 1)';
-        ctx.fillRect(380, 195, 520, 75);
+        ctx.textBaseline = 'middle';
+        
+        // Тень для таймера
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
+        
+        // Рисуем таймер
         ctx.fillStyle = '#e64a4a';
-        ctx.fillText(fmt(countdown), 640, 255);
+        ctx.fillText(fmt(countdown), 640, 310);
+        
+        // Сброс тени
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
         
         const percent = Math.min((elapsed / (duration * 1000)) * 15, 15);
-        updateProgress(`Запись: ${Math.round(elapsed/1000)}/${duration} сек`, 20 + percent);
+        updateProgress(`Запись: ${Math.round(elapsed/1000)}/${duration}с`, 20 + percent);
         
         if (now < endTime) {
-          setTimeout(renderFrame, frameDelay);
+          requestAnimationFrame(renderFrame);
         } else {
-          setTimeout(() => recorder.stop(), 500);
+          setTimeout(() => recorder.stop(), 300);
         }
       }
       
       renderFrame();
       
     } catch (error) {
-      console.error("Ошибка записи:", error);
+      console.error("Ошибка:", error);
       hideProgress();
       alert("Ошибка: " + error.message);
       recordBtn.disabled = false;
-      recordBtn.textContent = "🎥 Сохранить видео (MP4)";
+      recordBtn.textContent = "🎥 MP4 для Telegram";
     }
   }
   
-  // Делаем функции глобальными
   window.recordVideo = recordVideo;
   window.applyData = applyData;
   window.startCountdown = startCountdown;
