@@ -131,6 +131,15 @@
     width: 0%;
     transition: width 0.3s;
   }
+  
+  .note {
+    margin-top: 10px;
+    padding: 6px;
+    background: rgba(230, 74, 74, 0.2);
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
 </style>
 </head>
 <body>
@@ -157,22 +166,36 @@
     <label>🎬 Длительность видео (сек): <input id="inputDuration" type="number" value="7" min="1" max="60"></label>
     <button onclick="applyData()">Применить</button>
     <button onclick="startCountdown()">Start</button>
-    <button id="recordBtn" onclick="recordVideo()">🎥 Сохранить видео</button>
+    <button id="recordBtn" onclick="recordVideo()">🎥 Сохранить видео (MP4)</button>
     
     <div id="progress">
       <div id="progressText">Подготовка...</div>
       <div id="progressBar"><div id="progressFill"></div></div>
     </div>
+    
+    <div class="note">
+      💡 Видео сохраняется в MP4 формате для Telegram и других мессенджеров
+    </div>
   </div>
   
   <canvas id="renderCanvas"></canvas>
   
-  <!-- Подключаем только html2canvas -->
+  <!-- Подключаем библиотеки -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script type="module">
+    import { FFmpeg } from 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/esm/index.js';
+    import { fetchFile, toBlobURL } from 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js';
+    
+    window.FFmpeg = FFmpeg;
+    window.fetchFile = fetchFile;
+    window.toBlobURL = toBlobURL;
+    window.ffmpegReady = true;
+  </script>
   
   <script>
   let countdown = 0;
   let timerInterval = null;
+  let ffmpeg = null;
   
   function pad(n){return n.toString().padStart(2,"0");}
   
@@ -244,6 +267,38 @@
     document.getElementById("progress").style.display = "none";
   }
   
+  // Инициализация FFmpeg
+  async function initFFmpeg() {
+    if (ffmpeg) return ffmpeg;
+    
+    // Ждём загрузки модулей
+    while (!window.ffmpegReady) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    
+    updateProgress("Загрузка FFmpeg (первый раз может занять ~30 сек)...", 5);
+    
+    ffmpeg = new window.FFmpeg();
+    
+    ffmpeg.on("log", ({ message }) => {
+      console.log(message);
+    });
+    
+    ffmpeg.on("progress", ({ progress, time }) => {
+      const percent = Math.round(progress * 100);
+      updateProgress(`Конвертация в MP4: ${percent}%`, 50 + percent / 2);
+    });
+    
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+    
+    await ffmpeg.load({
+      coreURL: await window.toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL: await window.toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
+    });
+    
+    return ffmpeg;
+  }
+  
   async function recordVideo(){
     const recordBtn = document.getElementById("recordBtn");
     recordBtn.disabled = true;
@@ -257,153 +312,176 @@
     if(total===null){
       alert("Введите время в формате HH:MM:SS, например 12:00:00");
       recordBtn.disabled = false;
-      recordBtn.textContent = "🎥 Сохранить видео";
+      recordBtn.textContent = "🎥 Сохранить видео (MP4)";
       return;
     }
     
     countdown = total;
     updateTimer();
     
-    updateProgress("Создание снимка экрана...", 5);
-    
-    // Создаём snapshot с html2canvas
-    const capture = document.getElementById("captureZone");
-    const snapshot = await html2canvas(capture, {
-      backgroundColor: null,
-      useCORS: true,
-      scale: 1,
-      width: 1280,
-      height: 629
-    });
-    
-    // Создаём canvas для рендеринга
-    const canvas = document.getElementById("renderCanvas");
-    canvas.width = 1280;
-    canvas.height = 629;
-    const ctx = canvas.getContext("2d", { alpha: false });
-    
-    updateProgress("Подготовка записи...", 10);
-    
-    // Определяем доступный mime type
-    let mimeType = 'video/webm;codecs=h264';
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = 'video/webm;codecs=vp9,opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm;codecs=vp8,opus';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'video/webm';
+    try {
+      updateProgress("Создание снимка экрана...", 10);
+      
+      // Создаём snapshot
+      const capture = document.getElementById("captureZone");
+      const snapshot = await html2canvas(capture, {
+        backgroundColor: null,
+        useCORS: true,
+        scale: 1,
+        width: 1280,
+        height: 629
+      });
+      
+      // Canvas для рендеринга
+      const canvas = document.getElementById("renderCanvas");
+      canvas.width = 1280;
+      canvas.height = 629;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      
+      updateProgress("Подготовка записи...", 15);
+      
+      // Stream с canvas
+      const stream = canvas.captureStream(30);
+      
+      // Тихая аудиодорожка
+      const audioCtx = new AudioContext();
+      const dest = audioCtx.createMediaStreamDestination();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      gain.gain.value = 0.001;
+      osc.connect(gain).connect(dest);
+      osc.start();
+      
+      const combinedStream = new MediaStream([
+        ...stream.getVideoTracks(),
+        ...dest.stream.getAudioTracks()
+      ]);
+      
+      // Recorder
+      const recorder = new MediaRecorder(combinedStream, {
+        mimeType: 'video/webm;codecs=vp8,opus',
+        videoBitsPerSecond: 5000000
+      });
+      
+      const chunks = [];
+      recorder.ondataavailable = e => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      
+      recorder.onstop = async () => {
+        try {
+          updateProgress("Обработка видео...", 40);
+          
+          const webmBlob = new Blob(chunks, {type: "video/webm"});
+          
+          // Инициализируем FFmpeg
+          const ffmpegInstance = await initFFmpeg();
+          
+          updateProgress("Загрузка видео для конвертации...", 45);
+          await ffmpegInstance.writeFile("input.webm", await window.fetchFile(webmBlob));
+          
+          updateProgress("Конвертация в MP4...", 50);
+          
+          // Конвертация с параметрами для Telegram
+          await ffmpegInstance.exec([
+            "-i", "input.webm",
+            "-c:v", "libx264",
+            "-profile:v", "baseline",
+            "-level", "3.0",
+            "-preset", "fast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-ar", "44100",
+            "-movflags", "+faststart",
+            "-r", "30",
+            "output.mp4"
+          ]);
+          
+          updateProgress("Получение MP4 файла...", 95);
+          
+          const mp4Data = await ffmpegInstance.readFile("output.mp4");
+          const mp4Blob = new Blob([mp4Data.buffer], {type: "video/mp4"});
+          
+          // Очистка
+          await ffmpegInstance.deleteFile("input.webm");
+          await ffmpegInstance.deleteFile("output.mp4");
+          
+          // Скачивание
+          const url = URL.createObjectURL(mp4Blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `drift_countdown_${userName}_${duration}s.mp4`;
+          a.click();
+          URL.revokeObjectURL(url);
+          
+          updateProgress("Готово! ✅", 100);
+          setTimeout(hideProgress, 2000);
+          
+        } catch (error) {
+          console.error("Ошибка конвертации:", error);
+          hideProgress();
+          alert("Ошибка конвертации: " + error.message + "\n\nПопробуйте обновить страницу и записать снова.");
+        }
+        
+        recordBtn.disabled = false;
+        recordBtn.textContent = "🎥 Сохранить видео (MP4)";
+        osc.stop();
+        audioCtx.close();
+      };
+      
+      // Запуск записи
+      recorder.start(100);
+      updateProgress("Запись видео...", 20);
+      
+      startCountdown(duration);
+      
+      const startTime = Date.now();
+      const endTime = startTime + duration * 1000;
+      const fps = 30;
+      const frameDelay = 1000 / fps;
+      
+      // Анимация
+      function renderFrame() {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        
+        ctx.drawImage(snapshot, 0, 0, 1280, 629);
+        
+        // Обновляем таймер
+        ctx.font = '58px "Kdam Thmor", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+        ctx.fillRect(380, 195, 520, 75);
+        ctx.fillStyle = '#e64a4a';
+        ctx.fillText(fmt(countdown), 640, 255);
+        
+        const percent = Math.min((elapsed / (duration * 1000)) * 15, 15);
+        updateProgress(`Запись: ${Math.round(elapsed/1000)}/${duration} сек`, 20 + percent);
+        
+        if (now < endTime) {
+          setTimeout(renderFrame, frameDelay);
+        } else {
+          setTimeout(() => recorder.stop(), 500);
         }
       }
-    }
-    
-    console.log('Используется mime type:', mimeType);
-    
-    // Создаём stream с canvas
-    const stream = canvas.captureStream(30);
-    
-    // Добавляем тихую аудиодорожку
-    const audioCtx = new AudioContext();
-    const dest = audioCtx.createMediaStreamDestination();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    gain.gain.value = 0.001;
-    osc.connect(gain).connect(dest);
-    osc.start();
-    
-    const combinedStream = new MediaStream([
-      ...stream.getVideoTracks(),
-      ...dest.stream.getAudioTracks()
-    ]);
-    
-    // Recorder с максимальным качеством
-    const recorder = new MediaRecorder(combinedStream, {
-      mimeType: mimeType,
-      videoBitsPerSecond: 8000000 // 8 Mbps для качества
-    });
-    
-    const chunks = [];
-    recorder.ondataavailable = e => {
-      if (e.data.size > 0) {
-        chunks.push(e.data);
-      }
-    };
-    
-    recorder.onstop = async () => {
-      updateProgress("Сохранение видео...", 90);
       
-      // Определяем расширение по mime type
-      let extension = '.webm';
-      let fileType = 'video/webm';
+      renderFrame();
       
-      if (mimeType.includes('h264')) {
-        extension = '.mp4';
-        fileType = 'video/mp4';
-      }
-      
-      const blob = new Blob(chunks, {type: fileType});
-      
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `drift_countdown_${userName}_${duration}s${extension}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      
-      updateProgress("Готово! ✅", 100);
-      setTimeout(hideProgress, 2000);
-      
+    } catch (error) {
+      console.error("Ошибка записи:", error);
+      hideProgress();
+      alert("Ошибка: " + error.message);
       recordBtn.disabled = false;
-      recordBtn.textContent = "🎥 Сохранить видео";
-      osc.stop();
-      audioCtx.close();
-    };
-    
-    // Запускаем запись
-    recorder.start(100);
-    updateProgress("Запись видео...", 15);
-    
-    // Запускаем таймер
-    startCountdown(duration);
-    
-    const startTime = Date.now();
-    const endTime = startTime + duration * 1000;
-    const fps = 30;
-    const frameDelay = 1000 / fps;
-    
-    // Анимация с фиксированным FPS
-    function renderFrame() {
-      const now = Date.now();
-      const elapsed = now - startTime;
-      
-      // Рисуем базовый snapshot
-      ctx.drawImage(snapshot, 0, 0, 1280, 629);
-      
-      // Обновляем таймер на canvas
-      ctx.font = '58px "Kdam Thmor", sans-serif';
-      ctx.textAlign = 'center';
-      
-      // Очищаем область таймера (рисуем чёрный прямоугольник)
-      ctx.fillStyle = 'rgba(0, 0, 0, 1)';
-      ctx.fillRect(380, 195, 520, 75);
-      
-      // Рисуем новый таймер
-      ctx.fillStyle = '#e64a4a';
-      ctx.fillText(fmt(countdown), 640, 255);
-      
-      const percent = Math.min((elapsed / (duration * 1000)) * 70, 70);
-      updateProgress(`Запись: ${Math.round(elapsed/1000)}/${duration} сек`, 15 + percent);
-      
-      if (now < endTime) {
-        setTimeout(renderFrame, frameDelay);
-      } else {
-        setTimeout(() => {
-          recorder.stop();
-        }, 500);
-      }
+      recordBtn.textContent = "🎥 Сохранить видео (MP4)";
     }
-    
-    renderFrame();
   }
+  
+  // Делаем функции глобальными
+  window.recordVideo = recordVideo;
+  window.applyData = applyData;
+  window.startCountdown = startCountdown;
   </script>
 </body>
 </html>
