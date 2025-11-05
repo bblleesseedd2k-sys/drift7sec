@@ -8,7 +8,6 @@
 <link href="https://fonts.googleapis.com/css?family=Kdam+Thmor&display=swap" rel="stylesheet">
 
 <style>
-  /* ✅ Центрирование и масштабирование под экран */
   html, body {
     height: 100%;
     width: 100%;
@@ -21,7 +20,6 @@
     font-family: "Kdam Thmor", system-ui, sans-serif;
   }
 
-  /* Сам макет */
   #captureZone {
     position: relative;
     width: 1280px;
@@ -30,7 +28,6 @@
     transform-origin: top center;
   }
 
-  /* 🔹 Автоматическое масштабирование (сохраняет пропорции) */
   @media (min-aspect-ratio: 1280/629) {
     #captureZone { transform: scale(calc(100vh / 629)); }
   }
@@ -38,7 +35,6 @@
     #captureZone { transform: scale(calc(100vw / 1280)); }
   }
 
-  /* Оформление элементов */
   .warning-area {
     position: absolute;
     top: 100px; left: 415px;
@@ -87,7 +83,6 @@
     font-size: 18px;
   }
 
-  /* Панель управления */
   .controls {
     position: fixed;
     bottom: 10px; right: 10px;
@@ -143,11 +138,24 @@
 
   <canvas id="canvasRecorder"></canvas>
 
+<!-- библиотеки -->
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
+
 <script>
 let countdown = 0;
 let timerInterval = null;
+let ffmpegReady = false;
+let ffmpeg;
+
+// заранее загружаем FFmpeg
+(async () => {
+  const { createFFmpeg } = FFmpeg;
+  ffmpeg = createFFmpeg({ log: false });
+  await ffmpeg.load();
+  ffmpegReady = true;
+  console.log("✅ FFmpeg готов к работе");
+})();
 
 function pad(n){return n.toString().padStart(2,"0");}
 function fmt(s){
@@ -197,6 +205,8 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function recordVideo() {
+  if (!ffmpegReady) { alert("⏳ FFmpeg ещё загружается... подожди пару секунд и попробуй снова"); return; }
+
   const capture  = document.getElementById("captureZone");
   const controls = document.getElementById("controls");
   controls.style.display = "none";
@@ -232,12 +242,13 @@ async function recordVideo() {
   const recorder = new MediaRecorder(mixedStream, { mimeType: "video/webm; codecs=vp9,opus" });
   const chunks = [];
   recorder.ondataavailable = e => chunks.push(e.data);
+
   recorder.onstop = async () => {
     const blob = new Blob(chunks, { type: "video/webm" });
-    const { createFFmpeg, fetchFile } = FFmpeg;
-    const ffmpeg = createFFmpeg({ log: false });
-    await ffmpeg.load();
-    ffmpeg.FS("writeFile", "input.webm", await fetchFile(blob));
+    const arrayBuffer = await blob.arrayBuffer();
+
+    // 🧩 конвертация webm → mp4
+    ffmpeg.FS("writeFile", "input.webm", new Uint8Array(arrayBuffer));
     await ffmpeg.run("-i", "input.webm", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "output.mp4");
     const data = ffmpeg.FS("readFile", "output.mp4");
     const mp4Blob = new Blob([data.buffer], { type: "video/mp4" });
