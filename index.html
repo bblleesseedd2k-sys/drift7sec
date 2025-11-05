@@ -142,140 +142,107 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
 
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
 <script>
 let countdown = 0;
 let timerInterval = null;
-let ffmpegReady = false;
-let ffmpeg;
-
-// заранее загружаем FFmpeg
-(async () => {
-  const { createFFmpeg } = FFmpeg;
-  ffmpeg = createFFmpeg({ log: false });
-  await ffmpeg.load();
-  ffmpegReady = true;
-  console.log("✅ FFmpeg готов к работе");
-})();
 
 function pad(n){return n.toString().padStart(2,"0");}
-function fmt(s){
-  if (s < 0) s = 0;
-  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
-  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
-}
+function fmt(s){if (s<0) s=0; const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return `${pad(h)}:${pad(m)}:${pad(sec)}`;}
 function parseHMS(str){
-  const parts = str.trim().split(":");
-  if (parts.length !== 3) return null;
-  const [h,m,s] = parts.map(n => Number(n));
-  if ([h,m,s].some(n => Number.isNaN(n) || n<0)) return null;
-  return h*3600 + m*60 + s;
+  const parts = str.trim().split(":"); if (parts.length!==3) return null;
+  const [h,m,s]=parts.map(Number); if ([h,m,s].some(n=>isNaN(n)||n<0)) return null;
+  return h*3600+m*60+s;
 }
-function updateTimer(){ document.getElementById("timer").textContent = fmt(countdown); }
-
-function startCountdown(limitSeconds = null){
+function updateTimer(){document.getElementById("timer").textContent=fmt(countdown);}
+function startCountdown(limitSeconds=null){
   clearInterval(timerInterval);
-  const total = parseHMS(document.getElementById("inputTimer").value);
-  if (total === null){ alert("Введите время в формате HH:MM:SS, например 12:00:00"); return; }
-
-  countdown = total;
-  updateTimer();
-
-  let ticks = 0;
-  timerInterval = setInterval(() => {
-    countdown--;
-    updateTimer();
-    if (limitSeconds !== null) {
-      ticks++;
-      if (ticks >= limitSeconds) clearInterval(timerInterval);
-    }
-  }, 1000);
+  const total=parseHMS(document.getElementById("inputTimer").value);
+  if(total===null){alert("Введите время в формате HH:MM:SS, например 12:00:00");return;}
+  countdown=total; updateTimer();
+  let ticks=0;
+  timerInterval=setInterval(()=>{
+    countdown--; updateTimer();
+    if(limitSeconds!==null){ticks++; if(ticks>=limitSeconds) clearInterval(timerInterval);}
+  },1000);
 }
-
 function applyData(){
-  document.getElementById("phone").textContent   = document.getElementById("inputPhone").value;
-  document.getElementById("amount1").textContent = document.getElementById("inputAmt1").value;
-  document.getElementById("amount2").textContent = document.getElementById("inputAmt2").value;
-  document.getElementById("username").textContent= document.getElementById("inputName").value;
-  const startVal = document.getElementById("inputTimer").value.trim();
-  const startSec = parseHMS(startVal);
-  document.getElementById("timer").textContent = startSec !== null ? fmt(startSec) : startVal;
+  document.getElementById("phone").textContent=document.getElementById("inputPhone").value;
+  document.getElementById("amount1").textContent=document.getElementById("inputAmt1").value;
+  document.getElementById("amount2").textContent=document.getElementById("inputAmt2").value;
+  document.getElementById("username").textContent=document.getElementById("inputName").value;
+  const val=document.getElementById("inputTimer").value.trim();
+  const s=parseHMS(val);
+  document.getElementById("timer").textContent=s!==null?fmt(s):val;
 }
-document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("inputTimer").addEventListener("input", applyData);
+
+document.addEventListener("DOMContentLoaded",()=>{
+  document.getElementById("inputTimer").addEventListener("input",applyData);
 });
 
-async function recordVideo() {
-  if (!ffmpegReady) { alert("⏳ FFmpeg ещё загружается... подожди пару секунд и попробуй снова"); return; }
+async function recordVideo(){
+  const capture=document.getElementById("captureZone");
+  const controls=document.getElementById("controls");
+  controls.style.display="none";
 
-  const capture  = document.getElementById("captureZone");
-  const controls = document.getElementById("controls");
-  controls.style.display = "none";
+  let duration=parseInt(document.getElementById("inputDuration").value)||7;
+  duration=Math.min(Math.max(duration,1),60);
 
-  let duration = parseInt(document.getElementById("inputDuration").value) || 7;
-  if (duration < 1) duration = 1;
-  if (duration > 60) duration = 60;
+  const userName=(document.getElementById("inputName").value.trim().replace(/\s+/g,"_"))||"User";
+  const total=parseHMS(document.getElementById("inputTimer").value);
+  if(total===null){alert("Введите время в формате HH:MM:SS, например 12:00:00");controls.style.display="block";return;}
+  countdown=total; updateTimer();
 
-  const userName = (document.getElementById("inputName").value.trim().replace(/\s+/g, "_")) || "User";
-  const total = parseHMS(document.getElementById("inputTimer").value);
-  if (total === null){ alert("Введите время в формате HH:MM:SS, например 12:00:00"); controls.style.display="block"; return; }
-  countdown = total;
-  updateTimer();
+  await new Promise(r=>setTimeout(r,300));
 
-  await new Promise(r => setTimeout(r, 500));
+  const canvas=document.getElementById("canvasRecorder");
+  canvas.width=1280; canvas.height=629;
+  const ctx=canvas.getContext("2d");
+  const stream=canvas.captureStream(30);
 
-  const canvas = document.getElementById("canvasRecorder");
-  canvas.width = 1280;
-  canvas.height = 629;
-  const ctx = canvas.getContext("2d");
-  const stream = canvas.captureStream(30);
-
-  // 🎧 создаем "тишину"
-  const audioCtx = new AudioContext();
-  const dest = audioCtx.createMediaStreamDestination();
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  gain.gain.value = 0;
+  // 🎧 добавляем “тишину”
+  const audioCtx=new AudioContext();
+  const dest=audioCtx.createMediaStreamDestination();
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  gain.gain.value=0;
   osc.connect(gain).connect(dest);
   osc.start();
 
-  const mixedStream = new MediaStream([...stream.getTracks(), ...dest.stream.getTracks()]);
-  const recorder = new MediaRecorder(mixedStream, { mimeType: "video/webm; codecs=vp9,opus" });
-  const chunks = [];
-  recorder.ondataavailable = e => chunks.push(e.data);
-
-  recorder.onstop = async () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    const arrayBuffer = await blob.arrayBuffer();
-
-    // 🧩 конвертация webm → mp4
-    ffmpeg.FS("writeFile", "input.webm", new Uint8Array(arrayBuffer));
-    await ffmpeg.run("-i", "input.webm", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "output.mp4");
-    const data = ffmpeg.FS("readFile", "output.mp4");
-    const mp4Blob = new Blob([data.buffer], { type: "video/mp4" });
-    const url = URL.createObjectURL(mp4Blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `drift_countdown_${userName}_${duration}s.mp4`;
+  const combinedStream=new MediaStream([...stream.getTracks(), ...dest.stream.getTracks()]);
+  const recorder=new MediaRecorder(combinedStream,{mimeType:"video/webm;codecs=vp9,opus"});
+  const chunks=[];
+  recorder.ondataavailable=e=>chunks.push(e.data);
+  recorder.onstop=()=>{
+    const blob=new Blob(chunks,{type:"video/webm"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    // ⚠️ сохраняем как .mp4 (мессенджеры видят как видео)
+    a.download=`drift_countdown_${userName}_${duration}s.mp4`;
     a.click();
     URL.revokeObjectURL(url);
-    controls.style.display = "block";
+    controls.style.display="block";
   };
 
-  await html2canvas(capture, { backgroundColor: null, useCORS: true });
+  await html2canvas(capture,{backgroundColor:null,useCORS:true});
   recorder.start();
   startCountdown(duration);
 
-  const endTime = Date.now() + duration * 1000;
+  const endTime=Date.now()+duration*1000;
   (function drawFrame(){
-    html2canvas(capture, { backgroundColor: null, useCORS: true, scale: 1 })
-      .then(cnv => {
+    html2canvas(capture,{backgroundColor:null,useCORS:true,scale:1})
+      .then(cnv=>{
         ctx.clearRect(0,0,canvas.width,canvas.height);
         ctx.drawImage(cnv,0,0,canvas.width,canvas.height);
       });
-    if (Date.now() < endTime) requestAnimationFrame(drawFrame);
-    else setTimeout(() => recorder.stop(), 300);
+    if(Date.now()<endTime) requestAnimationFrame(drawFrame);
+    else setTimeout(()=>recorder.stop(),300);
   })();
 }
 </script>
+
 </body>
 </html>
+
